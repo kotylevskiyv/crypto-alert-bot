@@ -17,7 +17,7 @@ logger = logging.getLogger("funding_oi")
 
 # Биржи с надёжной поддержкой fetchFundingRate/fetchOpenInterest в ccxt
 # для USDT-перпетуалов
-PERP_EXCHANGES = ["binance", "bybit", "okx", "bitget", "gateio"]
+PERP_EXCHANGES = ["binance", "bybit", "okx", "bitget", "gate"]
 
 
 def _perp_symbol_for(exchange_id: str, base_symbol: str) -> str:
