@@ -151,4 +151,96 @@ def build_signal(symbol: str, exchange_data: dict[str, pd.DataFrame],
         return None
 
     long_votes = sum(1 for s, d in per_exchange_scores.values() if d == "LONG")
-    short_votes = sum(1 for s, d in per_exch
+    short_votes = sum(1 for s, d in per_exchange_scores.values() if d == "SHORT")
+    total = len(per_exchange_scores)
+
+    avg_score = sum(s for s, _ in per_exchange_scores.values()) / total
+    majority_direction = "LONG" if long_votes > short_votes else ("SHORT" if short_votes > long_votes else "NONE")
+    agreeing = max(long_votes, short_votes)
+    agreement_ratio = agreeing / total
+
+    strength = min(abs(avg_score), 100)
+    confidence = strength * agreement_ratio
+
+    reasons = [
+        f"Направление подтверждают {agreeing}/{total} бирж",
+        f"Средний скор индикаторов: {avg_score:.1f}",
+    ]
+
+    if funding_info and funding_info.get("funding_sources", 0) > 0:
+        from funding_oi import funding_bias_score
+        adj, explanation = funding_bias_score(funding_info["avg_funding_rate_pct"])
+        reasons.append(explanation)
+        if majority_direction == "LONG":
+            confidence += adj
+        elif majority_direction == "SHORT":
+            confidence -= adj
+
+    zone = None
+    if reference_df is not None:
+        zone, zone_pct = premium_discount_zone(reference_df)
+        zone_labels = {"premium": "premium-зона (дорого)", "discount": "discount-зона (дёшево)",
+                       "equilibrium": "равновесная зона"}
+        reasons.append(f"Цена в {zone_pct:.0f}% диапазона — {zone_labels.get(zone, zone)}")
+
+        # SMC-логика: LONG выгоднее из discount, SHORT — из premium
+        if majority_direction == "LONG":
+            if zone == "discount":
+                confidence += 8
+            elif zone == "premium":
+                confidence -= 8
+        elif majority_direction == "SHORT":
+            if zone == "premium":
+                confidence += 8
+            elif zone == "discount":
+                confidence -= 8
+
+        is_anomaly, z_score = volume_anomaly(reference_df)
+        if is_anomaly:
+            reasons.append(f"⚡ Аномальный объём (z={z_score:.1f}) — возможен резкий импульс")
+
+    confidence = max(0.0, min(100.0, confidence))
+
+    vp = compute_volume_profile(reference_df) if reference_df is not None else None
+    if vp:
+        reasons.append(f"POC={vp['poc']:.4f}, зона объёма {vp['val']:.4f}-{vp['vah']:.4f}")
+
+    signal = Signal(
+        symbol=symbol,
+        direction=majority_direction if confidence > 0 else "NONE",
+        score=round(confidence, 1),
+        price=last_price or 0.0,
+        atr=last_atr or 0.0,
+        reasons=reasons,
+        exchanges_confirming=agreeing,
+        exchanges_total=total,
+        volume_profile=vp,
+        zone=zone,
+    )
+
+    if signal.direction == "NONE":
+        return signal
+
+    if reference_df is not None:
+        vol_ok, vol_reason = _volatility_regime_ok(reference_df)
+        if not vol_ok:
+            signal.filtered_out_reason = f"Волатильность вне нормы: {vol_reason}"
+            signal.direction = "NONE"
+            return signal
+
+    if htf_data:
+        htf_votes = [_higher_timeframe_trend(df) for df in htf_data.values() if df is not None]
+        htf_votes = [v for v in htf_votes if v != "NONE"]
+        if htf_votes:
+            htf_long = htf_votes.count("LONG")
+            htf_short = htf_votes.count("SHORT")
+            htf_trend = "LONG" if htf_long > htf_short else ("SHORT" if htf_short > htf_long else "NONE")
+            if htf_trend != "NONE" and htf_trend != majority_direction:
+                signal.filtered_out_reason = f"Против тренда старшего ТФ ({htf_trend}) — сигнал заглушен"
+                signal.direction = "NONE"
+                return signal
+            reasons.append(f"Старший ТФ подтверждает направление ({htf_trend})")
+
+    signal.levels = compute_levels(signal.direction, signal.price, signal.atr)
+
+    return signal
