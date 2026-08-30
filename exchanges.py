@@ -3,7 +3,7 @@
 
 Инстансы бирж и загруженные списки рынков кэшируются в памяти процесса —
 это важно при сканировании большого числа монет: без кэша 200 монет x 10
-бирж означали бы сотни повторных созданий объектов биржи и load_markets().
+бирж означали бы сотни повторных создание объектов биржи и load_markets().
 """
 import logging
 import pandas as pd
@@ -59,30 +59,6 @@ def fetch_ohlcv(exchange_id: str, symbol: str, timeframe: str, limit: int = 200)
     if symbol not in ex.symbols:
         return None
     try:
-        raw = ex.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        if not raw:
-            return None
-        df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df["exchange"] = exchange_id
-        return df
-    except Exception as e:
-        logger.info(f"{exchange_id}/{symbol}: пропуск ({e})")
-        return None
-
-
-def fetch_multi_exchange(symbol: str, timeframe: str, limit: int = 200) -> dict[str, pd.DataFrame]:
-    """Тянет данные по одной паре со всех бирж из config.EXCHANGES."""
-    results = {}
-    for ex_id in config.EXCHANGES:
-        df = fetch_ohlcv(ex_id, symbol, timeframe, limit)
-        if df is not None and len(df) > 20:
-            results[ex_id] = df
-    return results
-        if symbol not in getattr(ex, "symbols", None) or []:
-            ex.load_markets()
-        if symbol not in ex.symbols:
-            return None
         raw = ex.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         if not raw:
             return None
