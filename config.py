@@ -33,7 +33,7 @@ EXCHANGES = [
     "kraken",
     "kucoin",
     "bitget",
-    "gateio",
+    "gate",
     "mexc",
     "htx",
 ]
