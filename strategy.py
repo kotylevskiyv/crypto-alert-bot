@@ -1,24 +1,28 @@
 """
-Логика генерации сигналов, версия 2.
+Логика генерации сигналов, версия 3.
 
 ВАЖНО (честно): это скоринговая эвристика, а НЕ система с доказанной
-статистической точностью 90%+. Такой точности не существует в природе рынка.
-Скор 0-100 — внутренняя мера согласованности сигналов, а не вероятность
-в строгом смысле. Реальную эффективность можно узнать только по логам сделок
-(signals_log.csv / analyze_performance.py) за достаточно длительный период.
+статистической точностью 90%+. Скор 0-100 — внутренняя мера согласованности
+сигналов, а не вероятность. Реальную эффективность можно узнать только
+по логам сделок (signals_log.csv / analyze_performance.py).
 
-Что нового в v2 по сравнению с базовой версией:
-  1. Funding rate как контрарианский фильтр (толпа переплечена = предупреждение)
-  2. Мультитаймфрейм-подтверждение (сигнал на младшем ТФ должен совпадать
-     по направлению со трендом на старшем ТФ — иначе сигнал глушится)
-  3. Фильтр волатильности (аномально низкая или уже "выстрелившая" ATR —
-     сигнал пропускается, т.к. в такой зоне статистика ненадёжна)
+Что нового в v3 по сравнению с v2:
+  1. Объёмный профиль (POC/VAH/VAL) и premium/discount зона — небольшая
+     поправка к score + контекст в причинах (SMC-подход: LONG выгоднее
+     из discount-зоны, SHORT — из premium)
+  2. Детектор аномального объёма (как у сервисов вроде MRX Signal, но
+     применяется к ликвидным парам, а не к микрокапам) — не меняет score,
+     только предупреждает в причинах
+  3. Конкретные уровни входа/TP1-3/SL прямо в сигнале — для ручного
+     использования, не только для авто-сделок на демо
 """
 from dataclasses import dataclass, field
 
 import pandas as pd
 
 from indicators import add_all_indicators
+from volume_profile import compute_volume_profile, premium_discount_zone, volume_anomaly
+from risk_levels import compute_levels
 
 
 HIGHER_TIMEFRAME_MAP = {
@@ -40,6 +44,9 @@ class Signal:
     exchanges_confirming: int = 0
     exchanges_total: int = 0
     filtered_out_reason: str | None = None
+    levels: dict | None = None
+    volume_profile: dict | None = None
+    zone: str | None = None
 
 
 def _score_single_exchange(df: pd.DataFrame) -> tuple[float, str, list]:
@@ -144,65 +151,4 @@ def build_signal(symbol: str, exchange_data: dict[str, pd.DataFrame],
         return None
 
     long_votes = sum(1 for s, d in per_exchange_scores.values() if d == "LONG")
-    short_votes = sum(1 for s, d in per_exchange_scores.values() if d == "SHORT")
-    total = len(per_exchange_scores)
-
-    avg_score = sum(s for s, _ in per_exchange_scores.values()) / total
-    majority_direction = "LONG" if long_votes > short_votes else ("SHORT" if short_votes > long_votes else "NONE")
-    agreeing = max(long_votes, short_votes)
-    agreement_ratio = agreeing / total
-
-    strength = min(abs(avg_score), 100)
-    confidence = strength * agreement_ratio
-
-    reasons = [
-        f"Направление подтверждают {agreeing}/{total} бирж",
-        f"Средний скор индикаторов: {avg_score:.1f}",
-    ]
-
-    if funding_info and funding_info.get("funding_sources", 0) > 0:
-        from funding_oi import funding_bias_score
-        adj, explanation = funding_bias_score(funding_info["avg_funding_rate_pct"])
-        reasons.append(explanation)
-        if majority_direction == "LONG":
-            confidence += adj
-        elif majority_direction == "SHORT":
-            confidence -= adj
-
-    confidence = max(0.0, min(100.0, confidence))
-
-    signal = Signal(
-        symbol=symbol,
-        direction=majority_direction if confidence > 0 else "NONE",
-        score=round(confidence, 1),
-        price=last_price or 0.0,
-        atr=last_atr or 0.0,
-        reasons=reasons,
-        exchanges_confirming=agreeing,
-        exchanges_total=total,
-    )
-
-    if signal.direction == "NONE":
-        return signal
-
-    if reference_df is not None:
-        vol_ok, vol_reason = _volatility_regime_ok(reference_df)
-        if not vol_ok:
-            signal.filtered_out_reason = f"Волатильность вне нормы: {vol_reason}"
-            signal.direction = "NONE"
-            return signal
-
-    if htf_data:
-        htf_votes = [_higher_timeframe_trend(df) for df in htf_data.values() if df is not None]
-        htf_votes = [v for v in htf_votes if v != "NONE"]
-        if htf_votes:
-            htf_long = htf_votes.count("LONG")
-            htf_short = htf_votes.count("SHORT")
-            htf_trend = "LONG" if htf_long > htf_short else ("SHORT" if htf_short > htf_long else "NONE")
-            if htf_trend != "NONE" and htf_trend != majority_direction:
-                signal.filtered_out_reason = f"Против тренда старшего ТФ ({htf_trend}) — сигнал заглушен"
-                signal.direction = "NONE"
-                return signal
-            reasons.append(f"Старший ТФ подтверждает направление ({htf_trend})")
-
-    return signal
+    short_votes = sum(1 for s, d in per_exch
