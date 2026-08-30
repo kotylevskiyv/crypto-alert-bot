@@ -32,13 +32,25 @@ def send_message(text: str) -> bool:
         return False
 
 
-def format_signal_message(signal, demo_result: str | None = None) -> str:
+def format_signal_message(signal, demo_result: str | None = None, btc_context: str | None = None) -> str:
     arrow = "🟢 LONG" if signal.direction == "LONG" else ("🔴 SHORT" if signal.direction == "SHORT" else "⚪ NONE")
     lines = [
         f"<b>{arrow} {signal.symbol}</b>  |  {signal.price:.4f}  |  {signal.score:.0f}/100  |  {signal.exchanges_confirming}/{signal.exchanges_total} бирж",
     ]
+
+    if signal.levels:
+        lv = signal.levels
+        lines.append(f"Вход: {lv['entry_low']:.4f}–{lv['entry_high']:.4f}")
+        lines.append(f"TP1: {lv['tp1']:.4f}  TP2: {lv['tp2']:.4f}  TP3: {lv['tp3']:.4f}")
+        lines.append(f"SL: {lv['sl']:.4f}")
+
     for r in signal.reasons:
         lines.append(f"• {r}")
+
+    if btc_context:
+        lines.append(btc_context)
+
     if demo_result:
         lines.append(f"Демо: {demo_result}")
+
     return "\n".join(lines)
