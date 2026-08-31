@@ -20,5 +20,5 @@ jobs:
           BYBIT_DEMO_API_SECRET: ${{ secrets.BYBIT_DEMO_API_SECRET }}
           SYMBOLS: "BTC/USDT,ETH/USDT,SOL/USDT"
           TIMEFRAME: "15m"
-          MIN_CONFIDENCE_SCORE: "25"
+          MIN_CONFIDENCE_SCORE: "40"
           AUTO_TRADE_DEMO: "false"
