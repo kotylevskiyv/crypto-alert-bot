@@ -38,10 +38,13 @@ QUICK_SCAN_EXCHANGES = [e.strip() for e in os.getenv(
     "QUICK_SCAN_EXCHANGES", "bitget,okx,kucoin,htx,mexc"
 ).split(",") if e.strip()]
 
-# Топ-10 бирж по объёму (публичные данные, ключи не нужны для чтения цен)
+# Рабочие биржи для получения данных с GitHub Actions.
+# Binance и Bybit НЕ включены — оба гарантированно блокируют IP серверов
+# GitHub Actions (гео-ограничение на уровне домена, подтверждено логами:
+# binance 451 "restricted location", bybit 403 "blocked from your country").
+# Держать их в списке бессмысленно — 100% отказ на каждом запросе, только
+# лишние секунды и шум в логах.
 EXCHANGES = [
-    "binance",
-    "bybit",
     "okx",
     "coinbase",
     "kraken",
