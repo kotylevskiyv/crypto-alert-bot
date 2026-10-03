@@ -3,7 +3,9 @@ on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch: {}
-jobs:
+permissions:
+  contents: write
+  jobs:
   run:
     runs-on: ubuntu-latest
     steps:
@@ -13,6 +15,13 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
       - run: python main.py --once
+      - name: Save bot state
+        run: |
+          git config user.name "crypto-alert-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add state/ signals_log.csv
+          git commit -m "Update bot state [skip ci]" || echo "Nothing to commit"
+          git push
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
