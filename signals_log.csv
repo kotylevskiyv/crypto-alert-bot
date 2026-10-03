@@ -1,2 +1,3 @@
 timestamp_utc,symbol,direction,score,price,exchanges_confirming,exchanges_total,demo_result
 2026-10-03T15:13:16.427602+00:00,APT/USDT,LONG,54.2,0.8093,6,6,
+2026-10-03T15:20:06.667605+00:00,USDGO/USDT,SHORT,52.5,1.0002,2,2,
