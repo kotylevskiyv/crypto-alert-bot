@@ -22,6 +22,7 @@ from strategy import build_signal, HIGHER_TIMEFRAME_MAP
 from telegram_notify import send_message, format_signal_message
 from logger_csv import log_signal
 from funding_oi import get_funding_and_oi
+from position_tracker import open_new_position, check_and_close_positions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,12 +113,25 @@ def process_symbol(symbol: str):
         message = format_signal_message(signal, demo_result, btc_context=btc_ctx)
         send_message(message)
         log_signal(signal, demo_result or "")
+        open_new_position(signal)
     else:
         logger.info(f"{symbol}: скор {signal.score} ниже порога {config.MIN_CONFIDENCE_SCORE}, алерт не шлём")
 
 
+def _monitor_open_positions():
+    """Monitor-шаг: проверяет, не дошли ли ранее открытые сигналы до SL/TP."""
+    from telegram_notify import format_close_message
+    closed = check_and_close_positions()
+    for record in closed:
+        send_message(format_close_message(record))
+        logger.info(f"{record['symbol']}: закрыт ({record['outcome']}, {record['r_multiple']:+.2f}R)")
+
+
 def run_cycle():
     global _btc_context
+
+    _monitor_open_positions()
+
     _btc_context = _compute_btc_context()
 
     symbols = build_symbol_list()

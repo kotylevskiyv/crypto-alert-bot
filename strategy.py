@@ -15,11 +15,15 @@
      только предупреждает в причинах
   3. Конкретные уровни входа/TP1-3/SL прямо в сигнале — для ручного
      использования, не только для авто-сделок на демо
+  4. Risk Engine gate: сигнал с R:R хуже config.MIN_RR_RATIO не проходит,
+     даже если все остальные фильтры пропустили (по мотивам "Risk has the
+     final say" — жёсткое правило без исключений)
 """
 from dataclasses import dataclass, field
 
 import pandas as pd
 
+import config
 from indicators import add_all_indicators
 from volume_profile import compute_volume_profile, premium_discount_zone, volume_anomaly
 from risk_levels import compute_levels
@@ -242,5 +246,14 @@ def build_signal(symbol: str, exchange_data: dict[str, pd.DataFrame],
             reasons.append(f"Старший ТФ подтверждает направление ({htf_trend})")
 
     signal.levels = compute_levels(signal.direction, signal.price, signal.atr)
+
+    # --- Risk Engine gate: сигнал с плохим соотношением прибыль/риск не проходит,
+    # даже если индикаторы и фильтры выше его пропустили ---
+    rr = signal.levels.get("rr_to_tp2", 0.0)
+    if rr < config.MIN_RR_RATIO:
+        signal.filtered_out_reason = f"R:R={rr:.2f} ниже минимума {config.MIN_RR_RATIO} — сигнал заглушен"
+        signal.direction = "NONE"
+        return signal
+    reasons.append(f"R:R до TP2 = {rr:.2f}")
 
     return signal

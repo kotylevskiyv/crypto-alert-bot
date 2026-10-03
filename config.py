@@ -55,4 +55,25 @@ EXCHANGES = [
     "htx",
 ]
 
+# --- Risk Engine (по мотивам Risk-шага из референса: position sizing + R:R gate) ---
+# Размер счёта, от которого считается position sizing в алертах.
+# Поставьте равным вашему реальному капиталу/счёту (например, $50,000 на CFT).
+ACCOUNT_EQUITY_USDT = float(os.getenv("ACCOUNT_EQUITY_USDT", "50000"))
+# Сколько % от equity готовы потерять на ОДНОЙ сделке при срабатывании стопа
+RISK_PERCENT_PER_TRADE = float(os.getenv("RISK_PERCENT_PER_TRADE", "1.0"))
+# Минимальное соотношение прибыль/риск (до TP2) — сигналы хуже этого порога
+# заглушаются фильтром, как и остальные gate-проверки в strategy.py
+MIN_RR_RATIO = float(os.getenv("MIN_RR_RATIO", "1.5"))
+
+# --- Monitor + Learn: отслеживание судьбы сигналов без Bybit API ---
+# Файлы состояния коммитятся обратно в репозиторий шагом в bot.yml,
+# поэтому переживают между запусками GitHub Actions (раннеры сами по себе
+# одноразовые и ничего не хранят).
+STATE_DIR = os.path.join(os.path.dirname(__file__), "state")
+OPEN_POSITIONS_FILE = os.path.join(STATE_DIR, "open_positions.csv")
+TRADE_HISTORY_FILE = os.path.join(STATE_DIR, "trade_history.csv")
+# Через сколько часов открытая (не сработавшая ни в TP, ни в SL) позиция
+# считается протухшей и закрывается принудительно по текущей цене
+POSITION_MAX_AGE_HOURS = float(os.getenv("POSITION_MAX_AGE_HOURS", "72"))
+
 LOG_FILE = os.path.join(os.path.dirname(__file__), "signals_log.csv")
